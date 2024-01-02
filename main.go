@@ -7,6 +7,9 @@ import (
 	"log"
 	"time"
 
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -46,12 +49,77 @@ const (
 	db.AutoMigrate(&Book{})
 	fmt.Println("Database migration completed!")
 
-	
-	
-	currentBook := getBook(db, 1)
-	
-	currentBook.Name = "The Lord of the Rings"
-	currentBook.Author = "J.R.R. Tolkien"
+	// Set up a new Fiber app
+	app := fiber.New()
 
-	updateBook(db, currentBook)
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(getBooks(db))
+	})
+
+	// Get one book
+	app.Get("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.Status(400).SendString("Invalid ID")
+		}
+		book := getBook(db, strconv.Itoa(id))
+		return c.JSON(book)
+	})
+
+	// Create new book
+	app.Post("/books", func(c *fiber.Ctx) error {
+		book := new(Book)
+		if err := c.BodyParser(book); err != nil {
+			return c.Status(400).SendString("Invalid request body")
+		}
+		err := createBook(db, book)
+		
+		if err != nil {
+			return c.Status(500).SendString("Internal server error")
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "New book created successfully!",
+	})
+	})
+
+	// Update book
+	app.Put("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.Status(400).SendString("Invalid ID")
+		}
+
+		book := new(Book)
+		if err := c.BodyParser(book); err != nil {
+			return c.Status(400).SendString("Invalid request body")
+		}
+
+		book.ID = uint(id)
+		updateBook(db, book)
+
+		return c.JSON(fiber.Map{
+			"message": "Book updated successfully!",
+		})
+	})
+
+	// Delete book
+	app.Delete("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		
+		if err != nil {
+			return c.Status(400).SendString("Invalid ID")
+		}
+		err = deleteBook(db, id)
+		if err != nil {
+			return c.Status(500).SendString("Internal server error")
+		}
+		return c.JSON(fiber.Map{
+			"message": "Book deleted successfully!",
+		})
+	})
+	
+
+	app.Listen(":8080")
+	
   }
